@@ -13,7 +13,7 @@
 
     body {
       overflow: hidden;
-      background: #1a1a2e;
+      background: #000;
     }
 
     canvas {
@@ -22,15 +22,18 @@
 
     #info {
       position: absolute;
-      top: 12px;
-      left: 12px;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
       color: #fff;
       font-family: sans-serif;
-      font-size: 14px;
-      background: rgba(0, 0, 0, 0.45);
-      padding: 8px 12px;
-      border-radius: 6px;
+      font-size: 13px;
+      background: rgba(0, 0, 0, 0.55);
+      padding: 8px 16px;
+      border-radius: 20px;
       pointer-events: none;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
     }
 
     #carregando {
@@ -45,7 +48,7 @@
   </style>
 </head>
 <body>
-  <div id="info">Constable's House — arraste para rotacionar | scroll para zoom | botão direito para mover</div>
+  <div id="info">Clique e arraste para mover | botão direito para rotacionar | scroll para zoom</div>
   <div id="carregando">Carregando modelo...</div>
 
   <script type="importmap">
@@ -63,16 +66,14 @@
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
     const cena = new THREE.Scene();
-    cena.background = new THREE.Color(0x87ceeb);
-    cena.fog = new THREE.Fog(0x87ceeb, 30, 100);
+    cena.background = new THREE.Color(0x000000);
 
     const camera = new THREE.PerspectiveCamera(
-      60,
+      55,
       window.innerWidth / window.innerHeight,
       0.1,
-      1000
+      50000
     );
-    camera.position.set(0, 5, 10);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -94,8 +95,40 @@
     const controles = new OrbitControls(camera, renderer.domElement);
     controles.enableDamping = true;
     controles.dampingFactor = 0.05;
-    controles.minDistance = 2;
-    controles.maxDistance = 80;
+    controles.screenSpacePanning = true;
+    controles.panSpeed = 0.3;
+    controles.enableZoom = false; // zoom customizado abaixo
+
+    // zoom com inércia — acumula velocidade e desacelera suavemente
+    const direcao = new THREE.Vector3();
+    let velocidadeZoom = 0; // velocidade inicial do zoom (ajustável)
+
+    renderer.domElement.addEventListener('wheel', (evento) => {
+      evento.preventDefault();
+      const delta = Math.sign(evento.deltaY) * Math.min(Math.abs(evento.deltaY), 80);
+      velocidadeZoom += (delta / 80) * 0.006;
+    }, { passive: false });
+
+    // clique esquerdo = mover (pan) | clique direito = rotacionar
+    controles.mouseButtons = {
+      LEFT: THREE.MOUSE.PAN,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.ROTATE
+    };
+
+    // ao iniciar rotação, reposiciona o pivô bem na frente da câmera
+    const direcaoRotacao = new THREE.Vector3();
+    renderer.domElement.addEventListener('mousedown', (evento) => {
+      if (evento.button === 2) {
+        camera.getWorldDirection(direcaoRotacao);
+        const distanciaAtual = camera.position.distanceTo(controles.target);
+        const pivoDist = Math.max(distanciaAtual * 0.15, 10);
+        controles.target
+          .copy(camera.position)
+          .addScaledVector(direcaoRotacao, pivoDist);
+        controles.update();
+      }
+    });
 
     const carregador = new GLTFLoader();
 
@@ -116,13 +149,15 @@
         const caixa = new THREE.Box3().setFromObject(modelo);
         const centro = caixa.getCenter(new THREE.Vector3());
         const tamanho = caixa.getSize(new THREE.Vector3());
-        const distancia = Math.max(tamanho.x, tamanho.y, tamanho.z) * 1.8;
 
+        // câmera começa centralizada na frente do modelo
+        const distanciaInicial = Math.max(tamanho.x, tamanho.y, tamanho.z) * 0.6;
         camera.position.set(
           centro.x,
-          centro.y + tamanho.y * 0.5,
-          centro.z + distancia
+          centro.y,
+          centro.z + distanciaInicial
         );
+
         controles.target.copy(centro);
         controles.update();
 
@@ -150,6 +185,16 @@
 
     function animar() {
       requestAnimationFrame(animar);
+
+      if (Math.abs(velocidadeZoom) > 0.00001) {
+        camera.getWorldDirection(direcao);
+        const distancia = camera.position.distanceTo(controles.target);
+        const passo = distancia * velocidadeZoom;
+        camera.position.addScaledVector(direcao, -passo);
+        controles.target.addScaledVector(direcao, -passo);
+        velocidadeZoom *= 0.80; // desaceleração rápida para controle preciso
+      }
+
       controles.update();
       renderer.render(cena, camera);
     }
