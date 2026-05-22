@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Atividade Three.js — Constable's House</title>
+  <title>Atividade Three.js — Mini Cidade</title>
   <style>
     * {
       margin: 0;
@@ -18,29 +18,6 @@
 
     canvas {
       display: block;
-    }
-
-    #nav {
-      position: absolute;
-      top: 16px;
-      right: 16px;
-      z-index: 10;
-    }
-
-    #nav a {
-      color: #fff;
-      font-family: sans-serif;
-      font-size: 13px;
-      background: rgba(0, 0, 0, 0.55);
-      padding: 6px 14px;
-      border-radius: 20px;
-      text-decoration: none;
-      letter-spacing: 0.5px;
-      border: 1px solid rgba(255,255,255,0.2);
-    }
-
-    #nav a:hover {
-      background: rgba(255,255,255,0.15);
     }
 
     #info {
@@ -67,13 +44,14 @@
       color: #fff;
       font-family: sans-serif;
       font-size: 18px;
+      text-align: center;
+      line-height: 2;
     }
   </style>
 </head>
 <body>
-  <div id="nav"><a href="castelo.html">Christchurch Castle →</a></div>
   <div id="info">Clique e arraste para mover | botão direito para rotacionar | scroll para zoom</div>
-  <div id="carregando">Carregando modelo...</div>
+  <div id="carregando">Carregando modelos...<br><span id="progresso"></span></div>
 
   <script type="importmap">
     {
@@ -121,11 +99,17 @@
     controles.dampingFactor = 0.05;
     controles.screenSpacePanning = true;
     controles.panSpeed = 0.3;
-    controles.enableZoom = false; // zoom customizado abaixo
+    controles.enableZoom = false;
 
-    // zoom com inércia — acumula velocidade e desacelera suavemente
+    controles.mouseButtons = {
+      LEFT: THREE.MOUSE.PAN,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.ROTATE
+    };
+
+    // zoom com inércia
     const direcao = new THREE.Vector3();
-    let velocidadeZoom = 0; // velocidade inicial do zoom (ajustável)
+    let velocidadeZoom = 0;
 
     renderer.domElement.addEventListener('wheel', (evento) => {
       evento.preventDefault();
@@ -133,14 +117,7 @@
       velocidadeZoom += (delta / 80) * 0.006;
     }, { passive: false });
 
-    // clique esquerdo = mover (pan) | clique direito = rotacionar
-    controles.mouseButtons = {
-      LEFT: THREE.MOUSE.PAN,
-      MIDDLE: THREE.MOUSE.DOLLY,
-      RIGHT: THREE.MOUSE.ROTATE
-    };
-
-    // ao iniciar rotação, reposiciona o pivô bem na frente da câmera
+    // pivô de rotação próximo à câmera
     const direcaoRotacao = new THREE.Vector3();
     renderer.domElement.addEventListener('mousedown', (evento) => {
       if (evento.button === 2) {
@@ -154,52 +131,71 @@
       }
     });
 
-    const carregador = new GLTFLoader();
+    // carrega um modelo, centraliza na origem e retorna dados da caixa
+    function carregarModelo(caminho, label) {
+      return new Promise((resolve, reject) => {
+        const carregador = new GLTFLoader();
+        carregador.load(
+          caminho,
+          (gltf) => {
+            const modelo = gltf.scene;
+            modelo.traverse((objeto) => {
+              if (objeto.isMesh) {
+                objeto.castShadow = true;
+                objeto.receiveShadow = true;
+              }
+            });
 
-    carregador.load(
-      'modelo/scene.gltf',
-      (gltf) => {
-        const modelo = gltf.scene;
+            // centraliza o modelo na origem antes de posicionar
+            const caixa = new THREE.Box3().setFromObject(modelo);
+            const centro = caixa.getCenter(new THREE.Vector3());
+            const tamanho = caixa.getSize(new THREE.Vector3());
+            modelo.position.sub(centro);
 
-        modelo.traverse((objeto) => {
-          if (objeto.isMesh) {
-            objeto.castShadow = true;
-            objeto.receiveShadow = true;
-          }
-        });
-
-        cena.add(modelo);
-
-        const caixa = new THREE.Box3().setFromObject(modelo);
-        const centro = caixa.getCenter(new THREE.Vector3());
-        const tamanho = caixa.getSize(new THREE.Vector3());
-
-        // câmera começa centralizada na frente do modelo
-        const distanciaInicial = Math.max(tamanho.x, tamanho.y, tamanho.z) * 0.6;
-        camera.position.set(
-          centro.x,
-          centro.y,
-          centro.z + distanciaInicial
+            resolve({ modelo, tamanho });
+          },
+          (progresso) => {
+            if (progresso.total > 0) {
+              const pct = Math.round((progresso.loaded / progresso.total) * 100);
+              document.getElementById('progresso').textContent =
+                `${label}: ${pct}%`;
+            }
+          },
+          reject
         );
+      });
+    }
 
-        controles.target.copy(centro);
-        controles.update();
+    Promise.all([
+      carregarModelo('modelo/scene.gltf',  'Constable\'s House'),
+      carregarModelo('modelo2/scene.gltf', 'Christchurch Castle'),
+    ]).then(([dados1, dados2]) => {
+      const { modelo: modelo1, tamanho: tamanho1 } = dados1;
+      const { modelo: modelo2, tamanho: tamanho2 } = dados2;
 
-        document.getElementById('carregando').style.display = 'none';
-      },
-      (progresso) => {
-        if (progresso.total > 0) {
-          const porcentagem = Math.round((progresso.loaded / progresso.total) * 100);
-          document.getElementById('carregando').textContent =
-            `Carregando modelo... ${porcentagem}%`;
-        }
-      },
-      (erro) => {
-        console.error('Erro ao carregar o modelo:', erro);
-        document.getElementById('carregando').textContent =
-          'Erro ao carregar o modelo. Verifique o console.';
-      }
-    );
+      // posiciona lado a lado com espaço entre eles
+      const espacamento = (tamanho1.x + tamanho2.x) * 0.55;
+      modelo1.position.x = -espacamento / 2;
+      modelo2.position.x =  espacamento / 2;
+
+      cena.add(modelo1);
+      cena.add(modelo2);
+
+      // câmera centralizada entre os dois, mostrando ambos
+      const alturaCena = Math.max(tamanho1.y, tamanho2.y);
+      const larguraCena = espacamento + Math.max(tamanho1.x, tamanho2.x);
+      const distanciaInicial = Math.max(larguraCena, alturaCena) * 0.9;
+
+      camera.position.set(0, alturaCena * 0.1, distanciaInicial);
+      controles.target.set(0, 0, 0);
+      controles.update();
+
+      document.getElementById('carregando').style.display = 'none';
+    }).catch((erro) => {
+      console.error('Erro ao carregar modelos:', erro);
+      document.getElementById('carregando').textContent =
+        'Erro ao carregar os modelos. Verifique o console.';
+    });
 
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight;
@@ -216,7 +212,7 @@
         const passo = distancia * velocidadeZoom;
         camera.position.addScaledVector(direcao, -passo);
         controles.target.addScaledVector(direcao, -passo);
-        velocidadeZoom *= 0.80; // desaceleração rápida para controle preciso
+        velocidadeZoom *= 0.80;
       }
 
       controles.update();
