@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Atividade Three.js — Constable's House</title>
+  <title>Atividade Three.js — Christchurch Castle</title>
   <style>
     * {
       margin: 0;
@@ -23,7 +23,7 @@
     #nav {
       position: absolute;
       top: 16px;
-      right: 16px;
+      left: 16px;
       z-index: 10;
     }
 
@@ -71,7 +71,7 @@
   </style>
 </head>
 <body>
-  <div id="nav"><a href="castelo.html">Christchurch Castle →</a></div>
+  <div id="nav"><a href="index.html">← Constable's House</a></div>
   <div id="info">Clique e arraste para mover | botão direito para rotacionar | scroll para zoom</div>
   <div id="carregando">Carregando modelo...</div>
 
@@ -121,11 +121,17 @@
     controles.dampingFactor = 0.05;
     controles.screenSpacePanning = true;
     controles.panSpeed = 0.3;
-    controles.enableZoom = false; // zoom customizado abaixo
+    controles.enableZoom = false;
 
-    // zoom com inércia — acumula velocidade e desacelera suavemente
+    controles.mouseButtons = {
+      LEFT: THREE.MOUSE.PAN,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.ROTATE
+    };
+
+    // zoom com inércia
     const direcao = new THREE.Vector3();
-    let velocidadeZoom = 0; // velocidade inicial do zoom (ajustável)
+    let velocidadeZoom = 0;
 
     renderer.domElement.addEventListener('wheel', (evento) => {
       evento.preventDefault();
@@ -133,14 +139,7 @@
       velocidadeZoom += (delta / 80) * 0.006;
     }, { passive: false });
 
-    // clique esquerdo = mover (pan) | clique direito = rotacionar
-    controles.mouseButtons = {
-      LEFT: THREE.MOUSE.PAN,
-      MIDDLE: THREE.MOUSE.DOLLY,
-      RIGHT: THREE.MOUSE.ROTATE
-    };
-
-    // ao iniciar rotação, reposiciona o pivô bem na frente da câmera
+    // pivô de rotação próximo à câmera
     const direcaoRotacao = new THREE.Vector3();
     renderer.domElement.addEventListener('mousedown', (evento) => {
       if (evento.button === 2) {
@@ -157,7 +156,7 @@
     const carregador = new GLTFLoader();
 
     carregador.load(
-      'modelo/scene.gltf',
+      'modelo2/scene.gltf',
       (gltf) => {
         const modelo = gltf.scene;
 
@@ -174,13 +173,8 @@
         const centro = caixa.getCenter(new THREE.Vector3());
         const tamanho = caixa.getSize(new THREE.Vector3());
 
-        // câmera começa centralizada na frente do modelo
         const distanciaInicial = Math.max(tamanho.x, tamanho.y, tamanho.z) * 0.6;
-        camera.position.set(
-          centro.x,
-          centro.y,
-          centro.z + distanciaInicial
-        );
+        camera.position.set(centro.x, centro.y, centro.z + distanciaInicial);
 
         controles.target.copy(centro);
         controles.update();
@@ -216,7 +210,7 @@
         const passo = distancia * velocidadeZoom;
         camera.position.addScaledVector(direcao, -passo);
         controles.target.addScaledVector(direcao, -passo);
-        velocidadeZoom *= 0.80; // desaceleração rápida para controle preciso
+        velocidadeZoom *= 0.80;
       }
 
       controles.update();
